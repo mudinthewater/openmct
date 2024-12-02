@@ -6,15 +6,15 @@ export default function OverlayPlotCompositionPolicy(openmct) {
     }
 
     let metadata = openmct.telemetry.getMetadata(domainObject);
+    console.debug(
+      `🗺️ the metadata values length is ${metadata.values().length}, and the domain and range check is ${hasDomain(metadata)}`
+    );
 
-    return metadata.values().length > 0 && hasDomainAndRange(metadata);
+    return metadata.values().length > 0 && hasDomain(metadata);
   }
 
-  function hasDomainAndRange(metadata) {
-    return (
-      metadata.valuesForHints(['range']).length > 0 &&
-      metadata.valuesForHints(['domain']).length > 0
-    );
+  function hasDomain(metadata) {
+    return metadata.valuesForHints(['domain']).length > 0;
   }
 
   return {
