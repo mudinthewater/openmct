@@ -58,6 +58,7 @@ import mount from 'utils/mount';
 import { toRaw } from 'vue';
 
 import configStore from '../configuration/ConfigStore.js';
+import EventPlotSeries from '../configuration/EventPlotSeries.js';
 import PlotConfigurationModel from '../configuration/PlotConfigurationModel.js';
 import { DrawLoader } from '../draw/DrawLoader.js';
 import eventHelpers from '../lib/eventHelpers.js';
@@ -367,28 +368,35 @@ export default {
     },
     onAddPoint(point, insertIndex, series) {
       const mainYAxisId = this.config.yAxis.get('id');
-      const seriesYAxisId = series.get('yAxisId');
-      const xRange = this.config.xAxis.get('displayRange');
+      const seriesYAxisId = series;
+      const { min: xMin, max: xMax } = this.config.xAxis.get('displayRange');
 
-      let yRange;
-      if (seriesYAxisId === mainYAxisId) {
-        yRange = this.config.yAxis.get('displayRange');
-      } else {
-        yRange = this.config.additionalYAxes
-          .find((yAxis) => yAxis.get('id') === seriesYAxisId)
-          .get('displayRange');
+      let yRange = null;
+      let yValue = null;
+      const isEventSeries = series instanceof EventPlotSeries;
+
+      if (!isEventSeries) {
+        if (seriesYAxisId === mainYAxisId) {
+          yRange = this.config.yAxis.get('displayRange');
+        } else {
+          const additionalYAxis = this.config.additionalYAxes.find(
+            (yAxis) => yAxis.get('id') === seriesYAxisId
+          );
+          if (additionalYAxis) {
+            yRange = additionalYAxis.get('displayRange');
+          }
+        }
+
+        yValue = series.getYVal(point);
       }
 
       const xValue = series.getXVal(point);
-      const yValue = series.getYVal(point);
 
-      // if user is not looking at data within the current bounds, don't draw the point
-      if (
-        xValue > xRange.min &&
-        xValue < xRange.max &&
-        yValue > yRange.min &&
-        yValue < yRange.max
-      ) {
+      const isWithinXRange = xMin < xValue && xValue < xMax;
+      const isWithinYRange =
+        isEventSeries || (yRange && yRange.min < yValue && yValue < yRange.max);
+
+      if (isWithinXRange && isWithinYRange) {
         this.scheduleDraw();
       }
     },
@@ -508,26 +516,44 @@ export default {
     setOffset(offsetPoint, index, series) {
       const mainYAxisId = this.config.yAxis.get('id');
       const yAxisId = series.get('yAxisId') || mainYAxisId;
-      if (this.offset[yAxisId].x && this.offset[yAxisId].y) {
+      const isEventSeries = series instanceof EventPlotSeries;
+      if (isEventSeries && !this.offset[yAxisId].y) {
+        this.offset[yAxisId].y = function (y) {
+          return y - 1;
+        }.bind(this);
+        this.offset[yAxisId].yVal = function (point, pSeries) {
+          // Since EventPlotSeries doesn't have y-values, always return 1
+          return 1;
+        }.bind(this);
+      }
+
+      if (this.offset[yAxisId].x && this.offset[yAxisId].y && !isEventSeries) {
         return;
       }
 
       const offsets = {
         x: series.getXVal(offsetPoint),
-        y: series.getYVal(offsetPoint)
+        y: isEventSeries ? 1 : series.getYVal(offsetPoint) // Use y=1 for EventPlotSeries
       };
 
+      // Set x-offset
       this.offset[yAxisId].x = function (x) {
         return x - offsets.x;
       }.bind(this);
-      this.offset[yAxisId].y = function (y) {
-        return y - offsets.y;
-      }.bind(this);
+
+      // Set y-offset only if it's not an EventPlotSeries (already handled above)
+      if (!isEventSeries) {
+        this.offset[yAxisId].y = function (y) {
+          return y - offsets.y;
+        }.bind(this);
+        this.offset[yAxisId].yVal = function (point, pSeries) {
+          return this.offset[yAxisId].y(pSeries.getYVal(point));
+        }.bind(this);
+      }
+
+      // Set xVal offset
       this.offset[yAxisId].xVal = function (point, pSeries) {
         return this.offset[yAxisId].x(pSeries.getXVal(point));
-      }.bind(this);
-      this.offset[yAxisId].yVal = function (point, pSeries) {
-        return this.offset[yAxisId].y(pSeries.getYVal(point));
       }.bind(this);
     },
     destroyCanvas() {
@@ -805,11 +831,6 @@ export default {
       return matchesId;
     },
     drawSeries(seriesId) {
-      const series = this.seriesCollection.byId(seriesId);
-      if (!series) {
-        console.warn('Series with ID ${seriesId} not found.');
-        return;
-      }
       const lines = this.lines.filter(this.matchByYAxisId.bind(this, seriesId));
       lines.forEach(this.drawLine, this);
       const pointSets = this.pointSets.filter(this.matchByYAxisId.bind(this, seriesId));
