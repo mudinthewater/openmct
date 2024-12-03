@@ -25,6 +25,7 @@ import Color from '@/ui/color/Color';
 import ColorPalette from '@/ui/color/ColorPalette';
 
 import Collection from './Collection.js';
+import EventPlotSeries from './EventPlotSeries.js';
 import PlotSeries from './PlotSeries.js';
 
 /**
@@ -100,17 +101,22 @@ export default class SeriesCollection extends Collection {
         );
         seriesConfig = this.plot.getPersistedSeriesConfig(domainObject.identifier);
       }
+      const metadata = this.openmct.telemetry.getMetadata(domainObject);
+      const hasRange = metadata.values().some((value) => value.range);
+
+      seriesConfig.type = hasRange ? 'plot' : 'event';
     }
 
     // Clone to prevent accidental mutation by ref.
     seriesConfig = JSON.parse(JSON.stringify(seriesConfig));
+    const SeriesClass = seriesConfig.type === 'event' ? EventPlotSeries : PlotSeries;
 
     if (!seriesConfig) {
       throw 'not possible';
     }
 
     this.add(
-      new PlotSeries({
+      new SeriesClass({
         model: seriesConfig,
         domainObject: domainObject,
         openmct: this.openmct,

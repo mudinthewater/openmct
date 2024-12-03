@@ -350,6 +350,10 @@ export default class YAxisModel extends Model {
       this.set('format', (n) => yFormat.format(n));
     }
 
+    if (!yMetadata) {
+      return;
+    }
+
     this.set('values', yMetadata.values);
 
     if (!label) {

@@ -60,6 +60,13 @@ export default class LegendModel extends Model {
     };
   }
 
+  /**
+   * @override
+   */
+  onYKeyChange(newKey, oldKey) {
+    return;
+  }
+
   destroy() {
     this.stopListening();
   }

@@ -58,8 +58,11 @@ const FRAGMENT_SHADER = `
                     if (distance > y || distance2 > y) {
                         discard;
                     }
+                } else if (uMarkerShape == 5) { // vertical line
+                  if (abs(gl_PointCoord.x - 0.5) > 0.025) {
+                    discard;
+                  }
                 }
-
             }
         }
     `;

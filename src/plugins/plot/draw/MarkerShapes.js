@@ -82,5 +82,18 @@ export const MARKER_SHAPES = {
       this.c2d.closePath();
       this.c2d.fill();
     }
+  },
+  verticalLine: {
+    label: 'Vertical Line',
+    drawWebGL: 5,
+    draw: (context, x, y, size) => {
+      const yStart = context.canvas.height; // Bottom of the canvas
+      const yEnd = 0; // Top of the canvas
+      context.strokeStyle = context.fillStyle; // Use the series color
+      context.beginPath();
+      context.moveTo(x, yStart);
+      context.lineTo(x, yEnd);
+      context.stroke();
+    }
   }
 };

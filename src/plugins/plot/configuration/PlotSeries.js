@@ -263,6 +263,10 @@ export default class PlotSeries extends Model {
     }
 
     const valueMetadata = this.metadata.value(newKey);
+    if (!valueMetadata) {
+      return;
+    }
+
     //TODO: Should we do this even if there is a persisted config?
     if (!this.persistedConfig || !this.persistedConfig.interpolate) {
       if (valueMetadata.format === 'enum') {
@@ -374,6 +378,9 @@ export default class PlotSeries extends Model {
    * @private
    */
   updateStats(point) {
+    if (!this.get('yKey')) {
+      return;
+    }
     const value = this.getYVal(point);
     let stats = this.get('stats');
     let changed = false;
@@ -428,13 +435,15 @@ export default class PlotSeries extends Model {
   add(newData, sorted = false) {
     let data = this.getSeriesData();
     let insertIndex = data.length;
-    const currentYVal = this.getYVal(newData);
-    const lastYVal = this.getYVal(data[insertIndex - 1]);
 
-    if (this.isValueInvalid(currentYVal) && this.isValueInvalid(lastYVal)) {
-      console.warn(`[Plot] Invalid Y Values detected: ${currentYVal} ${lastYVal}`);
+    if (this.get('yKey')) {
+      const currentYVal = this.getYVal(newData);
+      const lastYVal = this.getYVal(data[insertIndex - 1]);
 
-      return;
+      if (this.isValueInvalid(currentYVal) && this.isValueInvalid(lastYVal)) {
+        console.warn(`[Plot] Invalid Y Values detected: ${currentYVal} ${lastYVal}`);
+        return;
+      }
     }
 
     if (!sorted) {

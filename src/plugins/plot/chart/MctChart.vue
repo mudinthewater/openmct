@@ -804,12 +804,17 @@ export default {
 
       return matchesId;
     },
-    drawSeries(id) {
-      const lines = this.lines.filter(this.matchByYAxisId.bind(this, id));
+    drawSeries(seriesId) {
+      const series = this.seriesCollection.byId(seriesId);
+      if (!series) {
+        console.warn('Series with ID ${seriesId} not found.');
+        return;
+      }
+      const lines = this.lines.filter(this.matchByYAxisId.bind(this, seriesId));
       lines.forEach(this.drawLine, this);
-      const pointSets = this.pointSets.filter(this.matchByYAxisId.bind(this, id));
+      const pointSets = this.pointSets.filter(this.matchByYAxisId.bind(this, seriesId));
       pointSets.forEach(this.drawPoints, this);
-      const alarmSets = this.alarmSets.filter(this.matchByYAxisId.bind(this, id));
+      const alarmSets = this.alarmSets.filter(this.matchByYAxisId.bind(this, seriesId));
       alarmSets.forEach(this.drawAlarmPoints, this);
     },
     updateLimitLines() {
