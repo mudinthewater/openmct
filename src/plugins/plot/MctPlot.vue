@@ -731,6 +731,18 @@ export default {
                 return this.openmct.objects.areIdsEqual(compositionIdentifier, this.domainObject.identifier);
             });
         },
+        plotCompositionContainsId(domainObjectToFind) {
+            if (!this.domainObject.composition) {
+                return false;
+            }
+            if (!this.domainObjectToFind.identifier){
+                return false;
+            }
+
+            return this.domainObject.composition.some((compositionIdentifier) => {
+                return this.openmct.objects.areIdsEqual(compositionIdentifier, domainObjectToFind.identifier);
+            });
+        },
 
         clearData(domainObjectToClear) {
             // If we don't have an object to clear (global), or the IDs are equal, just clear the data.
