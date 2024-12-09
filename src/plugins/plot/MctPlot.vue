@@ -735,7 +735,7 @@ export default {
             if (!this.domainObject.composition) {
                 return false;
             }
-            if (!this.domainObjectToFind.identifier){
+            if (!domainObjectToFind.identifier){
                 return false;
             }
 
