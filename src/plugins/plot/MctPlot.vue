@@ -753,7 +753,7 @@ export default {
             if (!domainObjectToClear
             || this.openmct.objects.areIdsEqual(domainObjectToClear.identifier, this.domainObject.identifier)
             || this.compositionPathContainsId(domainObjectToClear)) 
-            || plotCompositionContainsId(domainObjectToClear))
+            || this.plotCompositionContainsId(domainObjectToClear))
             {
                 this.clearSeries();
             }
