@@ -752,7 +752,7 @@ export default {
             // If we find the ID, clear the plot.
             if (!domainObjectToClear
             || this.openmct.objects.areIdsEqual(domainObjectToClear.identifier, this.domainObject.identifier)
-            || this.compositionPathContainsId(domainObjectToClear)) 
+            || this.compositionPathContainsId(domainObjectToClear) 
             || this.plotCompositionContainsId(domainObjectToClear))
             {
                 this.clearSeries();
