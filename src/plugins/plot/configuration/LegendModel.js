@@ -53,9 +53,9 @@ export default class LegendModel extends Model {
       valueToShowWhenCollapsed: 'nearestValue',
       showTimestampWhenExpanded: true,
       showValueWhenExpanded: true,
-      showMaximumWhenExpanded: true,
-      showMinimumWhenExpanded: true,
-      showUnitsWhenExpanded: true,
+      showMaximumWhenExpanded: false,
+      showMinimumWhenExpanded: false,
+      showUnitsWhenExpanded: false,
       showLegendsForChildren: true
     };
   }
