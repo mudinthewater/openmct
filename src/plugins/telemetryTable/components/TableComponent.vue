@@ -297,6 +297,7 @@ import Search from '../../../ui/components/SearchComponent.vue';
 import ToggleSwitch from '../../../ui/components/ToggleSwitch.vue';
 import { useResizeObserver } from '../../../ui/composables/resize.js';
 import { MODE, ORDER } from '../constants.js';
+import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToTab } from '../copySelectedRows.js';
 import SizingRow from './SizingRow.vue';
 import TableColumnHeader from './TableColumnHeader.vue';
 import TableFooterIndicator from './TableFooterIndicator.vue';
@@ -884,6 +885,33 @@ export default {
 
       this.exportAsCSV(data);
     },
+    getMarkedRowsData() {
+      return this.table.tableRows
+        .getRows()
+        .filter((row) => row.marked === true)
+        .map((row) => row.getFormattedDatum(this.headers));
+    },
+    copySelectedRowsAsCSV() {
+      this.copySelectedRows(encodeRowsToCsv);
+    },
+    copySelectedRowsAsTab() {
+      this.copySelectedRows(encodeRowsToTab);
+    },
+    copySelectedRows(encodeRows) {
+      const data = this.getMarkedRowsData();
+
+      if (!data.length) {
+        return;
+      }
+
+      const text = encodeRows(data, Object.keys(this.headers));
+
+      copyTextToClipboard(text).then((copied) => {
+        if (!copied) {
+          this.openmct.notifications.error('Copy Selected failed: clipboard unavailable.');
+        }
+      });
+    },
     outstandingRequests(loading) {
       this.loading = loading;
     },
@@ -1181,6 +1209,9 @@ export default {
         type: 'telemetry-table',
         exportAllDataAsCSV: this.exportAllDataAsCSV,
         exportMarkedDataAsCSV: this.exportMarkedDataAsCSV,
+        copySelectedRowsAsCSV: this.copySelectedRowsAsCSV,
+        copySelectedRowsAsTab: this.copySelectedRowsAsTab,
+        hasMarkedRows: this.markedRows.length > 0,
         unmarkAllRows: this.unmarkAllRows,
         togglePauseByButton: this.togglePauseByButton,
         expandColumns: this.recalculateColumnWidths,
@@ -1271,6 +1302,7 @@ export default {
       this.clearRowsAndRerender();
     },
     updateViewContext(rowContext) {
+      rowContext.copySelectedRows = this.markedRows.length > 0;
       this.rowContext = rowContext;
     }
   }

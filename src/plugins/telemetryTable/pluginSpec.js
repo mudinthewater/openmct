@@ -489,5 +489,107 @@ describe('the plugin', () => {
       tableRows = element.querySelectorAll('table.c-telemetry-table__body > tbody > tr');
       expect(tableRows.length).toEqual(3);
     });
+
+    describe('Copy Selected', () => {
+      let writeText;
+      let realClipboard;
+
+      beforeEach(() => {
+        realClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        writeText = jasmine.createSpy('writeText').and.resolveTo();
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { writeText },
+          configurable: true
+        });
+      });
+
+      afterEach(() => {
+        if (realClipboard) {
+          Object.defineProperty(navigator, 'clipboard', realClipboard);
+        } else {
+          delete navigator.clipboard;
+        }
+      });
+
+      function firstRow() {
+        return element.querySelector('table.c-telemetry-table__body > tbody > tr:first-child');
+      }
+
+      function secondRow() {
+        return element.querySelector('table.c-telemetry-table__body > tbody > tr:nth-child(2)');
+      }
+
+      function contextMenuLabels() {
+        return Array.from(document.querySelectorAll('.c-menu li')).map((item) =>
+          item.getAttribute('aria-label')
+        );
+      }
+
+      async function openContextMenu(rowElement) {
+        rowElement.dispatchEvent(createMouseEvent('contextmenu'));
+        await new Promise((resolve) => setTimeout(resolve));
+        await nextTick();
+
+        return contextMenuLabels();
+      }
+
+      async function dismissContextMenu() {
+        document.dispatchEvent(createMouseEvent('click'));
+        await new Promise((resolve) => setTimeout(resolve));
+        await nextTick();
+      }
+
+      it('copies only the marked rows as CSV and tab text', async () => {
+        expect(tableView.getViewContext().hasMarkedRows).toBe(false);
+
+        // Rows render newest first, so the first row carries 'some-value 3'.
+        firstRow().dispatchEvent(createMouseEvent('click'));
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.getViewContext().copySelectedRowsAsCSV();
+        expect(writeText).toHaveBeenCalledTimes(1);
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+
+        tableView.getViewContext().copySelectedRowsAsTab();
+        expect(writeText).toHaveBeenCalledTimes(2);
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+      });
+
+      it('offers Copy Selected in the row menu only when rows are marked', async () => {
+        const unmarkedLabels = await openContextMenu(firstRow());
+
+        expect(unmarkedLabels).toEqual(['View Full Datum', 'View Historical Data']);
+
+        await dismissContextMenu();
+
+        // The first row is now marked (marked by the right-click above).
+        // Add the second row without collapsing the marked set.
+        secondRow().dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, view: window, ctrlKey: true })
+        );
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        // Right-clicking must not collapse the marked set.
+        const markedLabels = await openContextMenu(secondRow());
+
+        expect(markedLabels).toContain('Copy Selected (Tab)');
+        expect(markedLabels).toContain('Copy Selected (CSV)');
+
+        tableView.getViewContext().copySelectedRowsAsCSV();
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 2');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
+
+        await dismissContextMenu();
+      });
+    });
   });
 });

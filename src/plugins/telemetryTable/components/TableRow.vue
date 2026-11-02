@@ -41,6 +41,7 @@
 </template>
 
 <script>
+import { COPY_SELECTED_ROWS_ACTION_KEYS } from '../CopySelectedRowsAction.js';
 import TableCell from './TableCell.vue';
 
 export default {
@@ -191,8 +192,15 @@ export default {
     showContextMenu: async function (event) {
       event.preventDefault();
 
-      this.updateViewContext();
-      this.markRow(event);
+      // TableComponent enriches the context synchronously to report whether
+      // any rows are marked. Copy Selected operates on that marked set, so
+      // right-clicking must not change it; only mark the clicked row when
+      // nothing is marked yet, preserving the selection otherwise.
+      const rowContext = this.updateViewContext();
+
+      if (!rowContext.copySelectedRows) {
+        this.markRow(event);
+      }
 
       const contextualDomainObject = await this.row.getContextualDomainObject?.(
         this.openmct,
@@ -207,6 +215,9 @@ export default {
 
       const actions = this.row
         .getContextMenuActions()
+        .filter(
+          (key) => rowContext.copySelectedRows || !COPY_SELECTED_ROWS_ACTION_KEYS.includes(key)
+        )
         .map((key) => this.openmct.actions.getAction(key));
       const menuItems = this.openmct.menus.actionsToMenuItems(
         actions,
@@ -218,11 +229,15 @@ export default {
       }
     },
     updateViewContext() {
-      this.$emit('row-context-click', {
+      const rowContext = {
         viewHistoricalData: true,
         viewDatumAction: true,
         getDatum: this.getDatum
-      });
+      };
+
+      this.$emit('row-context-click', rowContext);
+
+      return rowContext;
     }
   }
 };

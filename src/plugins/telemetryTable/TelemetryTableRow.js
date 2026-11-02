@@ -22,6 +22,11 @@
 import { VIEW_DATUM_ACTION_KEY } from '@/plugins/viewDatumAction/ViewDatumAction.js';
 import { VIEW_HISTORICAL_DATA_ACTION_KEY } from '@/ui/preview/ViewHistoricalDataAction.js';
 
+import {
+  COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
+  COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY
+} from './CopySelectedRowsAction.js';
+
 export default class TelemetryTableRow {
   constructor(datum, columns, objectKeyString, limitEvaluator, inPlaceUpdateKey) {
     this.columns = columns;
@@ -88,7 +93,12 @@ export default class TelemetryTableRow {
   }
 
   getContextMenuActions() {
-    return [VIEW_DATUM_ACTION_KEY, VIEW_HISTORICAL_DATA_ACTION_KEY];
+    return [
+      VIEW_DATUM_ACTION_KEY,
+      VIEW_HISTORICAL_DATA_ACTION_KEY,
+      COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
+      COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY
+    ];
   }
 
   /**
