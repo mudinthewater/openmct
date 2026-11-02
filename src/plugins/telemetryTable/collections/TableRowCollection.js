@@ -37,6 +37,7 @@ export default class TableRowCollection extends EventEmitter {
 
     this.rows = [];
     this.columnFilters = {};
+    this.retainedMarkedRows = [];
     this.addRows = this.addRows.bind(this);
     this.removeRowsByObject = this.removeRowsByObject.bind(this);
     this.removeRowsByData = this.removeRowsByData.bind(this);
@@ -73,14 +74,67 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   clearRowsFromTableAndFilter(rows) {
+    this.retainMarkedRows();
+
     let rowsToAdd = this.filterRows(rows);
     // Reset of all rows, need to wipe current rows
     this.rows = [];
 
     this.sortAndMergeRows(rowsToAdd);
+    this.applyRetainedMarks();
 
     // We emit filter and update of visible rows
     this.emit('filter', rowsToAdd);
+  }
+
+  /**
+   * Remember the identity (object + datum) of currently marked rows so
+   * marks can be reapplied after filtering rebuilds the row objects.
+   * @private
+   */
+  retainMarkedRows() {
+    this.rows.forEach((row) => {
+      if (!row.marked) {
+        return;
+      }
+
+      const alreadyRetained = this.retainedMarkedRows.some(
+        (retained) =>
+          retained.objectKeyString === row.objectKeyString && _.isEqual(retained.datum, row.datum)
+      );
+
+      if (!alreadyRetained) {
+        this.retainedMarkedRows.push({
+          objectKeyString: row.objectKeyString,
+          datum: { ...row.datum }
+        });
+      }
+    });
+  }
+
+  /**
+   * Reapply retained marks to rebuilt rows with a matching datum, then
+   * refresh the retained set from the live marked rows.
+   * @private
+   */
+  applyRetainedMarks() {
+    if (this.retainedMarkedRows.length === 0) {
+      return;
+    }
+
+    this.rows.forEach((row) => {
+      const wasMarked = this.retainedMarkedRows.some(
+        (retained) =>
+          retained.objectKeyString === row.objectKeyString && _.isEqual(retained.datum, row.datum)
+      );
+
+      if (wasMarked) {
+        row.marked = true;
+      }
+    });
+
+    this.retainedMarkedRows = [];
+    this.retainMarkedRows();
   }
 
   filterRows(rows) {
@@ -308,6 +362,8 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   setColumnFilter(columnKey, filter) {
+    this.retainMarkedRows();
+
     filter = filter.trim().toLowerCase();
     let wasBlank = this.columnFilters[columnKey] === undefined;
     let isSubset = this.isSubsetOfCurrentFilter(columnKey, filter);
@@ -327,6 +383,8 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   setColumnRegexFilter(columnKey, filter) {
+    this.retainMarkedRows();
+
     filter = filter.trim();
     this.columnFilters[columnKey] = new RegExp(filter);
 
@@ -420,6 +478,7 @@ export default class TableRowCollection extends EventEmitter {
   clear() {
     let removedRows = this.rows;
     this.rows = [];
+    this.retainedMarkedRows = [];
 
     this.emit('remove', removedRows);
   }

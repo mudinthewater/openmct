@@ -546,6 +546,7 @@ export default {
     this.table.tableRows.on('remove', this.rowsRemoved);
     this.table.tableRows.on('sort', this.throttledUpdateVisibleRows);
     this.table.tableRows.on('filter', this.throttledUpdateVisibleRows);
+    this.table.tableRows.on('filter', this.checkForMarkedRows);
 
     this.openmct.time.on('boundsChanged', this.boundsChanged);
 
@@ -581,6 +582,7 @@ export default {
     this.table.tableRows.off('remove', this.rowsRemoved);
     this.table.tableRows.off('sort', this.throttledUpdateVisibleRows);
     this.table.tableRows.off('filter', this.throttledUpdateVisibleRows);
+    this.table.tableRows.off('filter', this.checkForMarkedRows);
 
     this.table.configuration.off('change', this.updateConfiguration);
 

@@ -561,6 +561,26 @@ describe('the plugin', () => {
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
       });
 
+      it('retains marked rows after filtering then clearing the filter', async () => {
+        // Rows render newest first, so the first row carries 'some-value 3'.
+        firstRow().dispatchEvent(createMouseEvent('click'));
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.table.tableRows.setColumnFilter('some-key', 'some-value 1');
+        tableView.table.tableRows.setColumnFilter('some-key', '');
+        await nextTick();
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.getViewContext().copySelectedRowsAsCSV();
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+      });
+
       it('offers Copy Selected in the row menu only when rows are marked', async () => {
         const unmarkedLabels = await openContextMenu(firstRow());
 
