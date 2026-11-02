@@ -52,6 +52,9 @@ jobs:
         run: npm run cov:e2e:report
 
       - name: Publish Results to Codecov.io
+        # Forks and tokenless contexts have no CODECOV_TOKEN secret; skip
+        # the upload instead of failing the run on a missing token.
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
