@@ -20,7 +20,12 @@
  * at runtime from the About dialog for additional information.
  *****************************************************************************/
 
-import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToTab } from './copySelectedRows.js';
+import {
+  copyTextToClipboard,
+  encodeRowsToCsv,
+  encodeRowsToHtml,
+  encodeRowsToTab
+} from './copySelectedRows.js';
 import {
   COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
   COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
@@ -75,6 +80,32 @@ describe('copy selected rows', () => {
     });
   });
 
+  describe('encodeRowsToHtml', () => {
+    it('encodes a header row plus one table row per row in column order', () => {
+      const rows = [
+        { ID: 'CH1', Title: 'Bus Voltage', Value: '28.1' },
+        { ID: 'CH2', Title: 'Bus Current', Value: '4.2' }
+      ];
+
+      expect(encodeRowsToHtml(rows, ['ID', 'Title', 'Value'])).toBe(
+        '<html><head><meta charset="utf-8"></head><body>\n' +
+          '<table><thead><tr><th>ID</th><th>Title</th><th>Value</th></tr></thead>' +
+          '<tbody><tr><td>CH1</td><td>Bus Voltage</td><td>28.1</td></tr>' +
+          '<tr><td>CH2</td><td>Bus Current</td><td>4.2</td></tr></tbody></table></body></html>'
+      );
+    });
+
+    it('escapes markup in values and blanks nulls', () => {
+      const rows = [{ ID: 'CH1', Title: '<b>a & "b"</b>', Value: null }];
+
+      expect(encodeRowsToHtml(rows, ['ID', 'Title', 'Value'])).toBe(
+        '<html><head><meta charset="utf-8"></head><body>\n' +
+          '<table><thead><tr><th>ID</th><th>Title</th><th>Value</th></tr></thead>' +
+          '<tbody><tr><td>CH1</td><td>&lt;b&gt;a &amp; &quot;b&quot;&lt;/b&gt;</td><td></td></tr></tbody></table></body></html>'
+      );
+    });
+  });
+
   describe('copyTextToClipboard', () => {
     let realClipboard;
 
@@ -112,6 +143,40 @@ describe('copy selected rows', () => {
       stubClipboard(writeText);
 
       expect(await copyTextToClipboard('a\tb')).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('a\tb');
+    });
+
+    it('offers plain text and HTML formats when both are provided', async () => {
+      const write = jasmine.createSpy('write').and.resolveTo();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText },
+        configurable: true
+      });
+
+      expect(await copyTextToClipboard('a\tb', '<table><tr><td>a</td></tr></table>')).toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+
+      const items = write.calls.mostRecent().args[0];
+      expect(items.length).toBe(1);
+      expect(items[0].types).toContain('text/plain');
+      expect(items[0].types).toContain('text/html');
+
+      const htmlBlob = await items[0].getType('text/html');
+      expect(await htmlBlob.text()).toBe('<table><tr><td>a</td></tr></table>');
+      const textBlob = await items[0].getType('text/plain');
+      expect(await textBlob.text()).toBe('a\tb');
+    });
+
+    it('falls back to plain text when the multi-format write rejects', async () => {
+      const write = jasmine.createSpy('write').and.rejectWith(new Error('denied'));
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText },
+        configurable: true
+      });
+
+      expect(await copyTextToClipboard('a\tb', '<table></table>')).toBe(true);
       expect(writeText).toHaveBeenCalledWith('a\tb');
     });
 
