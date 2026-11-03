@@ -30,6 +30,7 @@ describe('TableRowCollection marked row retention', () => {
     return {
       objectKeyString: 'test-object',
       datum: { utc: value, 'some-key': `value-${value}` },
+      fullDatum: { utc: value, 'some-key': `value-${value}` },
       columns: { utc: {}, 'some-key': {} },
       marked,
       getFormattedValue(key) {
@@ -39,6 +40,15 @@ describe('TableRowCollection marked row retention', () => {
         return this.datum[key];
       }
     };
+  }
+
+  // Rows whose datum content is identical (e.g. a repeated EVR) but which
+  // are distinct telemetry deliveries, told apart only by fullDatum.
+  function fakeIdenticalRow(id, marked = false) {
+    const row = fakeRow(1, marked);
+    row.fullDatum = { delivery: id };
+
+    return row;
   }
 
   beforeEach(() => {
@@ -86,6 +96,76 @@ describe('TableRowCollection marked row retention', () => {
     collection.clearRowsFromTableAndFilter([rebuiltDifferent]);
 
     expect(rebuiltDifferent.marked).toBeFalsy();
+  });
+
+  it('marks only the retained occurrence when rebuilt rows share an identical datum', () => {
+    collection.addRows([fakeIdenticalRow('a'), fakeIdenticalRow('b', true), fakeIdenticalRow('c')]);
+
+    // Narrowing drops every identical row from the collection.
+    collection.setColumnFilter('some-key', 'no-match');
+    expect(collection.getRows().length).toBe(0);
+
+    // Rebuilt rows are new deliveries, so only occurrence position can
+    // tell the marked copy from its identical siblings.
+    collection.setColumnFilter('some-key', '');
+    const rebuilt = [fakeIdenticalRow('x'), fakeIdenticalRow('y'), fakeIdenticalRow('z')];
+    collection.clearRowsFromTableAndFilter(rebuilt);
+
+    expect(rebuilt.map((row) => Boolean(row.marked))).toEqual([false, true, false]);
+  });
+
+  it('marks the exact retained delivery when rebuilt rows share an identical datum', () => {
+    const markedRow = fakeIdenticalRow('b', true);
+    collection.addRows([fakeIdenticalRow('a'), markedRow, fakeIdenticalRow('c')]);
+
+    collection.setColumnFilter('some-key', 'no-match');
+    collection.setColumnFilter('some-key', '');
+
+    // Same deliveries in a different order: the mark follows the delivery.
+    const rebuilt = [fakeIdenticalRow('c'), fakeIdenticalRow('a'), fakeIdenticalRow('b')];
+    rebuilt[2].fullDatum = markedRow.fullDatum;
+    collection.clearRowsFromTableAndFilter(rebuilt);
+
+    expect(rebuilt.map((row) => Boolean(row.marked))).toEqual([false, false, true]);
+  });
+
+  it('retains every marked occurrence of an identical datum', () => {
+    collection.addRows([
+      fakeIdenticalRow('a', true),
+      fakeIdenticalRow('b'),
+      fakeIdenticalRow('c', true)
+    ]);
+
+    collection.setColumnFilter('some-key', 'no-match');
+    collection.setColumnFilter('some-key', '');
+
+    const rebuilt = [fakeIdenticalRow('x'), fakeIdenticalRow('y'), fakeIdenticalRow('z')];
+    collection.clearRowsFromTableAndFilter(rebuilt);
+
+    expect(rebuilt.map((row) => Boolean(row.marked))).toEqual([true, false, true]);
+  });
+
+  it('does not resurrect a row that was unmarked before the next filter cycle', () => {
+    collection.addRows([fakeRow(1, true), fakeRow(2), fakeRow(3)]);
+
+    // First cycle: narrow, then clear and rebuild; row 1 stays marked.
+    collection.setColumnFilter('some-key', 'value-2');
+    collection.setColumnFilter('some-key', '');
+    let rebuilt = [fakeRow(1), fakeRow(2), fakeRow(3)];
+    collection.clearRowsFromTableAndFilter(rebuilt);
+    expect(rebuilt.map((row) => Boolean(row.marked))).toEqual([true, false, false]);
+
+    // The user unselects all rows, then marks a different row.
+    rebuilt.forEach((row) => (row.marked = false));
+    rebuilt[1].marked = true;
+
+    // Second cycle: only the newly marked row may come back marked.
+    collection.setColumnFilter('some-key', 'value-3');
+    collection.setColumnFilter('some-key', '');
+    rebuilt = [fakeRow(1), fakeRow(2), fakeRow(3)];
+    collection.clearRowsFromTableAndFilter(rebuilt);
+
+    expect(rebuilt.map((row) => Boolean(row.marked))).toEqual([false, true, false]);
   });
 
   it('forgets retained marks when the collection is cleared', () => {
