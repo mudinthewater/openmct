@@ -21,11 +21,7 @@
  *****************************************************************************/
 
 import { MODE } from './constants.js';
-import {
-  COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-  COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-  CopySelectedRowsAction
-} from './CopySelectedRowsAction.js';
+import { CopySelectedRowsAction } from './CopySelectedRowsAction.js';
 import TableConfigurationViewProvider from './TableConfigurationViewProvider.js';
 import telemetryTableStylesInterceptor from './telemetryTableStylesInterceptor.js';
 import getTelemetryTableType from './TelemetryTableType.js';
@@ -52,21 +48,6 @@ export default function plugin(
       openmct.actions.register(action);
     });
 
-    openmct.actions.register(
-      new CopySelectedRowsAction(openmct, {
-        key: COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-        name: 'Copy Selected (Tab)',
-        description: 'Copy the selected table rows to the clipboard as tab-delimited text',
-        copyMethod: 'copySelectedRowsAsTab'
-      })
-    );
-    openmct.actions.register(
-      new CopySelectedRowsAction(openmct, {
-        key: COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-        name: 'Copy Selected (CSV)',
-        description: 'Copy the selected table rows to the clipboard as CSV text',
-        copyMethod: 'copySelectedRowsAsCSV'
-      })
-    );
+    openmct.actions.register(new CopySelectedRowsAction(openmct));
   };
 }

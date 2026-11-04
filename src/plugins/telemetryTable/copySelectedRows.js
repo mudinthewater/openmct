@@ -56,35 +56,68 @@ export function encodeRowsToCsv(rows, columnKeys) {
   return new CSV(sanitized, { header: columnKeys }).encode();
 }
 
+function escapeHtmlValue(value) {
+  return sanitizeCellValue(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
- * Encode formatted rows as tab-delimited text with a header row, suitable
- * for pasting into a spreadsheet. Tabs and line breaks inside cell values
- * are replaced with spaces so they cannot break the column structure.
+ * Encode formatted rows as an HTML document containing a table. Offered
+ * to the clipboard alongside the plain-text encoding so that rich-text
+ * targets (for example a GitHub issue, which converts pasted HTML
+ * tables to Markdown tables) receive a real table while plain-text
+ * targets keep the CSV encoding. The document framing and newline
+ * before the table match spreadsheet clipboard HTML: browsers add
+ * document wrappers when handing this flavor to a page, and the newline
+ * keeps those wrappers from running into the converted Markdown table.
  * @param {Object[]} rows formatted row objects keyed by column key
  * @param {string[]} columnKeys column keys in display order
- * @returns {string} tab-delimited text
+ * @returns {string} HTML document markup containing the table
  */
-export function encodeRowsToTab(rows, columnKeys) {
-  function encodeRow(values) {
-    return values.map((value) => sanitizeCellValue(value).replace(/[\t\r\n]+/g, ' ')).join('\t');
-  }
+export function encodeRowsToHtml(rows, columnKeys) {
+  const header = columnKeys.map((key) => `<th>${escapeHtmlValue(key)}</th>`).join('');
+  const body = rows
+    .map(
+      (row) =>
+        `<tr>${columnKeys.map((key) => `<td>${escapeHtmlValue(row[key])}</td>`).join('')}</tr>`
+    )
+    .join('');
 
-  return [
-    encodeRow(columnKeys),
-    ...rows.map((row) => encodeRow(columnKeys.map((key) => row[key])))
-  ].join('\n');
+  return `<html><head><meta charset="utf-8"></head><body>\n<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`;
 }
 
 /**
  * Copy text to the clipboard, falling back to a temporary textarea and
  * `document.execCommand('copy')` when the asynchronous Clipboard API is
- * unavailable (for example on non-secure origins).
+ * unavailable (for example on non-secure origins). When HTML markup is
+ * provided and the multi-format Clipboard API is available, both the
+ * plain text and the HTML are offered so each paste target can pick the
+ * format it understands.
  * @param {string} text text to copy
+ * @param {string} [html] optional HTML representation of the same content
  * @returns {Promise<boolean>} true when the text was copied
  */
-export function copyTextToClipboard(text) {
+export async function copyTextToClipboard(text, html) {
   if (!text) {
-    return Promise.resolve(false);
+    return false;
+  }
+
+  if (html && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' })
+        })
+      ]);
+
+      return true;
+    } catch {
+      // Fall through to the plain-text paths below.
+    }
   }
 
   if (navigator.clipboard?.writeText) {
@@ -94,7 +127,7 @@ export function copyTextToClipboard(text) {
     );
   }
 
-  return Promise.resolve(fallbackCopyText(text));
+  return fallbackCopyText(text);
 }
 
 function fallbackCopyText(text) {

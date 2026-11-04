@@ -297,7 +297,7 @@ import Search from '../../../ui/components/SearchComponent.vue';
 import ToggleSwitch from '../../../ui/components/ToggleSwitch.vue';
 import { useResizeObserver } from '../../../ui/composables/resize.js';
 import { MODE, ORDER } from '../constants.js';
-import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToTab } from '../copySelectedRows.js';
+import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToHtml } from '../copySelectedRows.js';
 import SizingRow from './SizingRow.vue';
 import TableColumnHeader from './TableColumnHeader.vue';
 import TableFooterIndicator from './TableFooterIndicator.vue';
@@ -893,22 +893,18 @@ export default {
         .filter((row) => row.marked === true)
         .map((row) => row.getFormattedDatum(this.headers));
     },
-    copySelectedRowsAsCSV() {
-      this.copySelectedRows(encodeRowsToCsv);
-    },
-    copySelectedRowsAsTab() {
-      this.copySelectedRows(encodeRowsToTab);
-    },
-    copySelectedRows(encodeRows) {
+    copySelectedRows() {
       const data = this.getMarkedRowsData();
 
       if (!data.length) {
         return;
       }
 
-      const text = encodeRows(data, Object.keys(this.headers));
+      const columnKeys = Object.keys(this.headers);
+      const text = encodeRowsToCsv(data, columnKeys);
+      const html = encodeRowsToHtml(data, columnKeys);
 
-      copyTextToClipboard(text).then((copied) => {
+      copyTextToClipboard(text, html).then((copied) => {
         if (!copied) {
           this.openmct.notifications.error('Copy Selected failed: clipboard unavailable.');
         }
@@ -1248,8 +1244,7 @@ export default {
         type: 'telemetry-table',
         exportAllDataAsCSV: this.exportAllDataAsCSV,
         exportMarkedDataAsCSV: this.exportMarkedDataAsCSV,
-        copySelectedRowsAsCSV: this.copySelectedRowsAsCSV,
-        copySelectedRowsAsTab: this.copySelectedRowsAsTab,
+        copySelectedRows: this.copySelectedRows,
         hasMarkedRows: this.markedRows.length > 0,
         unmarkAllRows: this.unmarkAllRows,
         togglePauseByButton: this.togglePauseByButton,

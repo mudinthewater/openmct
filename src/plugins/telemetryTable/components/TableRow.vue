@@ -41,7 +41,7 @@
 </template>
 
 <script>
-import { COPY_SELECTED_ROWS_ACTION_KEYS } from '../CopySelectedRowsAction.js';
+import { COPY_SELECTED_ROWS_ACTION_KEY } from '../CopySelectedRowsAction.js';
 import TableCell from './TableCell.vue';
 
 export default {
@@ -215,9 +215,7 @@ export default {
 
       const actions = this.row
         .getContextMenuActions()
-        .filter(
-          (key) => rowContext.copySelectedRows || !COPY_SELECTED_ROWS_ACTION_KEYS.includes(key)
-        )
+        .filter((key) => rowContext.copySelectedRows || key !== COPY_SELECTED_ROWS_ACTION_KEY)
         .map((key) => this.openmct.actions.getAction(key));
       const menuItems = this.openmct.menus.actionsToMenuItems(
         actions,
