@@ -20,17 +20,8 @@
  * at runtime from the About dialog for additional information.
  *****************************************************************************/
 
-import {
-  copyTextToClipboard,
-  encodeRowsToCsv,
-  encodeRowsToHtml,
-  encodeRowsToTab
-} from './copySelectedRows.js';
-import {
-  COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-  COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-  CopySelectedRowsAction
-} from './CopySelectedRowsAction.js';
+import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToHtml } from './copySelectedRows.js';
+import { COPY_SELECTED_ROWS_ACTION_KEY, CopySelectedRowsAction } from './CopySelectedRowsAction.js';
 import TelemetryTableRow from './TelemetryTableRow.js';
 
 describe('copy selected rows', () => {
@@ -58,25 +49,6 @@ describe('copy selected rows', () => {
       const rows = [{ name: '=cmd|calc', value: '1' }];
 
       expect(encodeRowsToCsv(rows, ['name', 'value'])).toBe('"name","value"\r\n"\'=cmd|calc","1"');
-    });
-  });
-
-  describe('encodeRowsToTab', () => {
-    it('encodes a header row plus one line per row joined by tabs', () => {
-      const rows = [
-        { ID: 'CH1', Title: 'Bus Voltage', Value: '28.1' },
-        { ID: 'CH2', Title: 'Bus Current', Value: '4.2' }
-      ];
-
-      expect(encodeRowsToTab(rows, ['ID', 'Title', 'Value'])).toBe(
-        'ID\tTitle\tValue\nCH1\tBus Voltage\t28.1\nCH2\tBus Current\t4.2'
-      );
-    });
-
-    it('replaces tabs and line breaks inside values and blanks nulls', () => {
-      const rows = [{ ID: 'CH\t1', Title: 'a\nb', Value: null }];
-
-      expect(encodeRowsToTab(rows, ['ID', 'Title', 'Value'])).toBe('ID\tTitle\tValue\nCH 1\ta b\t');
     });
   });
 
@@ -142,8 +114,8 @@ describe('copy selected rows', () => {
 
       stubClipboard(writeText);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
-      expect(writeText).toHaveBeenCalledWith('a\tb');
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('"a","b"');
     });
 
     it('offers plain text and HTML formats when both are provided', async () => {
@@ -154,7 +126,7 @@ describe('copy selected rows', () => {
         configurable: true
       });
 
-      expect(await copyTextToClipboard('a\tb', '<table><tr><td>a</td></tr></table>')).toBe(true);
+      expect(await copyTextToClipboard('"a","b"', '<table><tr><td>a</td></tr></table>')).toBe(true);
       expect(writeText).not.toHaveBeenCalled();
 
       const items = write.calls.mostRecent().args[0];
@@ -165,7 +137,7 @@ describe('copy selected rows', () => {
       const htmlBlob = await items[0].getType('text/html');
       expect(await htmlBlob.text()).toBe('<table><tr><td>a</td></tr></table>');
       const textBlob = await items[0].getType('text/plain');
-      expect(await textBlob.text()).toBe('a\tb');
+      expect(await textBlob.text()).toBe('"a","b"');
     });
 
     it('falls back to plain text when the multi-format write rejects', async () => {
@@ -176,15 +148,15 @@ describe('copy selected rows', () => {
         configurable: true
       });
 
-      expect(await copyTextToClipboard('a\tb', '<table></table>')).toBe(true);
-      expect(writeText).toHaveBeenCalledWith('a\tb');
+      expect(await copyTextToClipboard('"a","b"', '<table></table>')).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('"a","b"');
     });
 
     it('falls back to execCommand when the clipboard API rejects', async () => {
       stubClipboard(jasmine.createSpy('writeText').and.rejectWith(new Error('denied')));
       spyOn(document, 'execCommand').and.returnValue(true);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
       expect(document.execCommand).toHaveBeenCalledWith('copy');
       expect(document.querySelectorAll('textarea').length).toBe(0);
     });
@@ -193,7 +165,7 @@ describe('copy selected rows', () => {
       stubClipboard(null);
       spyOn(document, 'execCommand').and.returnValue(true);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
       expect(document.execCommand).toHaveBeenCalledWith('copy');
       expect(document.querySelectorAll('textarea').length).toBe(0);
     });
@@ -206,25 +178,16 @@ describe('copy selected rows', () => {
       };
     }
 
-    it('exposes the action keys used by table rows', () => {
-      expect(COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY).toBe('copySelectedRowsTab');
-      expect(COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY).toBe('copySelectedRowsCsv');
+    it('exposes the action key used by table rows', () => {
+      expect(COPY_SELECTED_ROWS_ACTION_KEY).toBe('copySelectedRows');
     });
 
-    function csvAction() {
-      return new CopySelectedRowsAction(
-        {},
-        {
-          key: COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-          name: 'Copy Selected (CSV)',
-          description: 'Copy the selected table rows to the clipboard as CSV text',
-          copyMethod: 'copySelectedRowsAsCSV'
-        }
-      );
+    function copyAction() {
+      return new CopySelectedRowsAction({});
     }
 
     it('applies only to telemetry table views with marked rows', () => {
-      const action = csvAction();
+      const action = copyAction();
 
       expect(action.appliesTo([], fakeView({ type: 'telemetry-table', hasMarkedRows: true }))).toBe(
         true
@@ -236,41 +199,31 @@ describe('copy selected rows', () => {
       expect(action.appliesTo([], {})).toBe(false);
     });
 
-    it('invokes the matching view context copy method', () => {
-      const copyAsCSV = jasmine.createSpy('copySelectedRowsAsCSV');
-      const copyAsTab = jasmine.createSpy('copySelectedRowsAsTab');
+    it('is labelled Copy Selected and invokes the view context copy method', () => {
+      const copySelectedRows = jasmine.createSpy('copySelectedRows');
       const view = fakeView({
         type: 'telemetry-table',
         hasMarkedRows: true,
-        copySelectedRowsAsCSV: copyAsCSV,
-        copySelectedRowsAsTab: copyAsTab
+        copySelectedRows
       });
+      const action = copyAction();
 
-      csvAction().invoke([], view);
-      new CopySelectedRowsAction(
-        {},
-        {
-          key: COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-          name: 'Copy Selected (Tab)',
-          description: 'Copy the selected table rows to the clipboard as tab-delimited text',
-          copyMethod: 'copySelectedRowsAsTab'
-        }
-      ).invoke([], view);
+      expect(action.name).toBe('Copy Selected');
 
-      expect(copyAsCSV).toHaveBeenCalledTimes(1);
-      expect(copyAsTab).toHaveBeenCalledTimes(1);
+      action.invoke([], view);
+
+      expect(copySelectedRows).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('menu wiring', () => {
-    it('lists both copy actions in telemetry table row context menus', () => {
+    it('lists the copy action in telemetry table row context menus', () => {
       const row = new TelemetryTableRow({}, {}, 'some-key', null);
 
       expect(row.getContextMenuActions()).toEqual([
         'viewDatumAction',
         'viewHistoricalData',
-        COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-        COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY
+        COPY_SELECTED_ROWS_ACTION_KEY
       ]);
     });
   });

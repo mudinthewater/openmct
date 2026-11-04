@@ -56,25 +56,6 @@ export function encodeRowsToCsv(rows, columnKeys) {
   return new CSV(sanitized, { header: columnKeys }).encode();
 }
 
-/**
- * Encode formatted rows as tab-delimited text with a header row, suitable
- * for pasting into a spreadsheet. Tabs and line breaks inside cell values
- * are replaced with spaces so they cannot break the column structure.
- * @param {Object[]} rows formatted row objects keyed by column key
- * @param {string[]} columnKeys column keys in display order
- * @returns {string} tab-delimited text
- */
-export function encodeRowsToTab(rows, columnKeys) {
-  function encodeRow(values) {
-    return values.map((value) => sanitizeCellValue(value).replace(/[\t\r\n]+/g, ' ')).join('\t');
-  }
-
-  return [
-    encodeRow(columnKeys),
-    ...rows.map((row) => encodeRow(columnKeys.map((key) => row[key])))
-  ].join('\n');
-}
-
 function escapeHtmlValue(value) {
   return sanitizeCellValue(value)
     .replace(/&/g, '&amp;')
@@ -88,7 +69,7 @@ function escapeHtmlValue(value) {
  * to the clipboard alongside the plain-text encoding so that rich-text
  * targets (for example a GitHub issue, which converts pasted HTML
  * tables to Markdown tables) receive a real table while plain-text
- * targets keep the tab/CSV encoding. The document framing and newline
+ * targets keep the CSV encoding. The document framing and newline
  * before the table match spreadsheet clipboard HTML: browsers add
  * document wrappers when handing this flavor to a page, and the newline
  * keeps those wrappers from running into the converted Markdown table.
