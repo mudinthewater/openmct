@@ -592,7 +592,7 @@ describe('the plugin', () => {
 
         expect(tableView.getViewContext().hasMarkedRows).toBe(true);
 
-        tableView.getViewContext().copySelectedRowsAsCSV();
+        tableView.getViewContext().copySelectedRows();
         expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
