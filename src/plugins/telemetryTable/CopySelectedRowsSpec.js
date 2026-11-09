@@ -20,12 +20,8 @@
  * at runtime from the About dialog for additional information.
  *****************************************************************************/
 
-import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToTab } from './copySelectedRows.js';
-import {
-  COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-  COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-  CopySelectedRowsAction
-} from './CopySelectedRowsAction.js';
+import { copyTextToClipboard, encodeRowsToCsv, encodeRowsToHtml } from './copySelectedRows.js';
+import { COPY_SELECTED_ROWS_ACTION_KEY, CopySelectedRowsAction } from './CopySelectedRowsAction.js';
 import TelemetryTableRow from './TelemetryTableRow.js';
 
 describe('copy selected rows', () => {
@@ -56,22 +52,29 @@ describe('copy selected rows', () => {
     });
   });
 
-  describe('encodeRowsToTab', () => {
-    it('encodes a header row plus one line per row joined by tabs', () => {
+  describe('encodeRowsToHtml', () => {
+    it('encodes a header row plus one table row per row in column order', () => {
       const rows = [
         { ID: 'CH1', Title: 'Bus Voltage', Value: '28.1' },
         { ID: 'CH2', Title: 'Bus Current', Value: '4.2' }
       ];
 
-      expect(encodeRowsToTab(rows, ['ID', 'Title', 'Value'])).toBe(
-        'ID\tTitle\tValue\nCH1\tBus Voltage\t28.1\nCH2\tBus Current\t4.2'
+      expect(encodeRowsToHtml(rows, ['ID', 'Title', 'Value'])).toBe(
+        '<html><head><meta charset="utf-8"></head><body>\n' +
+          '<table><thead><tr><th>ID</th><th>Title</th><th>Value</th></tr></thead>' +
+          '<tbody><tr><td>CH1</td><td>Bus Voltage</td><td>28.1</td></tr>' +
+          '<tr><td>CH2</td><td>Bus Current</td><td>4.2</td></tr></tbody></table></body></html>'
       );
     });
 
-    it('replaces tabs and line breaks inside values and blanks nulls', () => {
-      const rows = [{ ID: 'CH\t1', Title: 'a\nb', Value: null }];
+    it('escapes markup in values and blanks nulls', () => {
+      const rows = [{ ID: 'CH1', Title: '<b>a & "b"</b>', Value: null }];
 
-      expect(encodeRowsToTab(rows, ['ID', 'Title', 'Value'])).toBe('ID\tTitle\tValue\nCH 1\ta b\t');
+      expect(encodeRowsToHtml(rows, ['ID', 'Title', 'Value'])).toBe(
+        '<html><head><meta charset="utf-8"></head><body>\n' +
+          '<table><thead><tr><th>ID</th><th>Title</th><th>Value</th></tr></thead>' +
+          '<tbody><tr><td>CH1</td><td>&lt;b&gt;a &amp; &quot;b&quot;&lt;/b&gt;</td><td></td></tr></tbody></table></body></html>'
+      );
     });
   });
 
@@ -111,15 +114,49 @@ describe('copy selected rows', () => {
 
       stubClipboard(writeText);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
-      expect(writeText).toHaveBeenCalledWith('a\tb');
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('"a","b"');
+    });
+
+    it('offers plain text and HTML formats when both are provided', async () => {
+      const write = jasmine.createSpy('write').and.resolveTo();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText },
+        configurable: true
+      });
+
+      expect(await copyTextToClipboard('"a","b"', '<table><tr><td>a</td></tr></table>')).toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+
+      const items = write.calls.mostRecent().args[0];
+      expect(items.length).toBe(1);
+      expect(items[0].types).toContain('text/plain');
+      expect(items[0].types).toContain('text/html');
+
+      const htmlBlob = await items[0].getType('text/html');
+      expect(await htmlBlob.text()).toBe('<table><tr><td>a</td></tr></table>');
+      const textBlob = await items[0].getType('text/plain');
+      expect(await textBlob.text()).toBe('"a","b"');
+    });
+
+    it('falls back to plain text when the multi-format write rejects', async () => {
+      const write = jasmine.createSpy('write').and.rejectWith(new Error('denied'));
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText },
+        configurable: true
+      });
+
+      expect(await copyTextToClipboard('"a","b"', '<table></table>')).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('"a","b"');
     });
 
     it('falls back to execCommand when the clipboard API rejects', async () => {
       stubClipboard(jasmine.createSpy('writeText').and.rejectWith(new Error('denied')));
       spyOn(document, 'execCommand').and.returnValue(true);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
       expect(document.execCommand).toHaveBeenCalledWith('copy');
       expect(document.querySelectorAll('textarea').length).toBe(0);
     });
@@ -128,7 +165,7 @@ describe('copy selected rows', () => {
       stubClipboard(null);
       spyOn(document, 'execCommand').and.returnValue(true);
 
-      expect(await copyTextToClipboard('a\tb')).toBe(true);
+      expect(await copyTextToClipboard('"a","b"')).toBe(true);
       expect(document.execCommand).toHaveBeenCalledWith('copy');
       expect(document.querySelectorAll('textarea').length).toBe(0);
     });
@@ -141,25 +178,16 @@ describe('copy selected rows', () => {
       };
     }
 
-    it('exposes the action keys used by table rows', () => {
-      expect(COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY).toBe('copySelectedRowsTab');
-      expect(COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY).toBe('copySelectedRowsCsv');
+    it('exposes the action key used by table rows', () => {
+      expect(COPY_SELECTED_ROWS_ACTION_KEY).toBe('copySelectedRows');
     });
 
-    function csvAction() {
-      return new CopySelectedRowsAction(
-        {},
-        {
-          key: COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY,
-          name: 'Copy Selected (CSV)',
-          description: 'Copy the selected table rows to the clipboard as CSV text',
-          copyMethod: 'copySelectedRowsAsCSV'
-        }
-      );
+    function copyAction() {
+      return new CopySelectedRowsAction({});
     }
 
     it('applies only to telemetry table views with marked rows', () => {
-      const action = csvAction();
+      const action = copyAction();
 
       expect(action.appliesTo([], fakeView({ type: 'telemetry-table', hasMarkedRows: true }))).toBe(
         true
@@ -171,41 +199,31 @@ describe('copy selected rows', () => {
       expect(action.appliesTo([], {})).toBe(false);
     });
 
-    it('invokes the matching view context copy method', () => {
-      const copyAsCSV = jasmine.createSpy('copySelectedRowsAsCSV');
-      const copyAsTab = jasmine.createSpy('copySelectedRowsAsTab');
+    it('is labelled Copy Selected and invokes the view context copy method', () => {
+      const copySelectedRows = jasmine.createSpy('copySelectedRows');
       const view = fakeView({
         type: 'telemetry-table',
         hasMarkedRows: true,
-        copySelectedRowsAsCSV: copyAsCSV,
-        copySelectedRowsAsTab: copyAsTab
+        copySelectedRows
       });
+      const action = copyAction();
 
-      csvAction().invoke([], view);
-      new CopySelectedRowsAction(
-        {},
-        {
-          key: COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-          name: 'Copy Selected (Tab)',
-          description: 'Copy the selected table rows to the clipboard as tab-delimited text',
-          copyMethod: 'copySelectedRowsAsTab'
-        }
-      ).invoke([], view);
+      expect(action.name).toBe('Copy Selected');
 
-      expect(copyAsCSV).toHaveBeenCalledTimes(1);
-      expect(copyAsTab).toHaveBeenCalledTimes(1);
+      action.invoke([], view);
+
+      expect(copySelectedRows).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('menu wiring', () => {
-    it('lists both copy actions in telemetry table row context menus', () => {
+    it('lists the copy action in telemetry table row context menus', () => {
       const row = new TelemetryTableRow({}, {}, 'some-key', null);
 
       expect(row.getContextMenuActions()).toEqual([
         'viewDatumAction',
         'viewHistoricalData',
-        COPY_SELECTED_ROWS_AS_TAB_ACTION_KEY,
-        COPY_SELECTED_ROWS_AS_CSV_ACTION_KEY
+        COPY_SELECTED_ROWS_ACTION_KEY
       ]);
     });
   });

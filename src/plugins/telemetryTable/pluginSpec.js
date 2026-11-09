@@ -539,7 +539,7 @@ describe('the plugin', () => {
         await nextTick();
       }
 
-      it('copies only the marked rows as CSV and tab text', async () => {
+      it('copies only the marked rows as CSV text', async () => {
         expect(tableView.getViewContext().hasMarkedRows).toBe(false);
 
         // Rows render newest first, so the first row carries 'some-value 3'.
@@ -548,17 +548,34 @@ describe('the plugin', () => {
 
         expect(tableView.getViewContext().hasMarkedRows).toBe(true);
 
-        tableView.getViewContext().copySelectedRowsAsCSV();
+        tableView.getViewContext().copySelectedRows();
         expect(writeText).toHaveBeenCalledTimes(1);
         expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+      });
 
-        tableView.getViewContext().copySelectedRowsAsTab();
-        expect(writeText).toHaveBeenCalledTimes(2);
-        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
-        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
-        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+      it('offers an HTML table alongside the CSV text', async () => {
+        const write = jasmine.createSpy('write').and.resolveTo();
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { write, writeText },
+          configurable: true
+        });
+
+        firstRow().dispatchEvent(createMouseEvent('click'));
+        await nextTick();
+
+        tableView.getViewContext().copySelectedRows();
+        await new Promise((resolve) => setTimeout(resolve));
+
+        expect(writeText).not.toHaveBeenCalled();
+        const items = write.calls.mostRecent().args[0];
+        const textBlob = await items[0].getType('text/plain');
+        expect(await textBlob.text()).toContain('some-value 3');
+        const htmlBlob = await items[0].getType('text/html');
+        const html = await htmlBlob.text();
+        expect(html).toContain('<table>');
+        expect(html).toContain('some-value 3');
       });
 
       it('offers Copy Selected in the row menu only when rows are marked', async () => {
@@ -580,10 +597,11 @@ describe('the plugin', () => {
         // Right-clicking must not collapse the marked set.
         const markedLabels = await openContextMenu(secondRow());
 
-        expect(markedLabels).toContain('Copy Selected (Tab)');
-        expect(markedLabels).toContain('Copy Selected (CSV)');
+        expect(markedLabels).toContain('Copy Selected');
+        expect(markedLabels).not.toContain('Copy Selected (Tab)');
+        expect(markedLabels).not.toContain('Copy Selected (CSV)');
 
-        tableView.getViewContext().copySelectedRowsAsCSV();
+        tableView.getViewContext().copySelectedRows();
         expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
         expect(writeText.calls.mostRecent().args[0]).toContain('some-value 2');
         expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
