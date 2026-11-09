@@ -546,6 +546,7 @@ export default {
     this.table.tableRows.on('remove', this.rowsRemoved);
     this.table.tableRows.on('sort', this.throttledUpdateVisibleRows);
     this.table.tableRows.on('filter', this.throttledUpdateVisibleRows);
+    this.table.tableRows.on('filter', this.focusMarkedRowsAfterFilter);
 
     this.openmct.time.on('boundsChanged', this.boundsChanged);
 
@@ -581,6 +582,7 @@ export default {
     this.table.tableRows.off('remove', this.rowsRemoved);
     this.table.tableRows.off('sort', this.throttledUpdateVisibleRows);
     this.table.tableRows.off('filter', this.throttledUpdateVisibleRows);
+    this.table.tableRows.off('filter', this.focusMarkedRowsAfterFilter);
 
     this.table.configuration.off('change', this.updateConfiguration);
 
@@ -1138,6 +1140,43 @@ export default {
     checkForMarkedRows() {
       this.isShowingMarkedRowsOnly = false;
       this.markedRows = this.table.tableRows.getRows().filter((row) => row.marked);
+    },
+    focusMarkedRowsAfterFilter() {
+      this.checkForMarkedRows();
+
+      if (!this.scrollable || this.markedRows.length === 0) {
+        return;
+      }
+
+      const firstMarkedRowIndex = this.table.tableRows.getRows().findIndex((row) => row.marked);
+
+      if (firstMarkedRowIndex === -1) {
+        return;
+      }
+
+      // Filtering can rebuild the full row set around a marked row that
+      // sits well outside the visible window; bring it back into view.
+      // Until the rebuilt rows have painted, the scrollable's height
+      // still reflects the filtered row set and the browser clamps the
+      // scroll position, so the write is retried across frames until
+      // the full height is available and the position sticks.
+      const targetScrollTop = firstMarkedRowIndex * this.rowHeight;
+      let attempts = 0;
+      const scrollToMarkedRow = () => {
+        if (!this.scrollable) {
+          return;
+        }
+
+        this.setHeight();
+        this.scrollable.scrollTop = targetScrollTop;
+        this.updateVisibleRows();
+
+        if (this.scrollable.scrollTop < targetScrollTop && attempts++ < 10) {
+          requestAnimationFrame(scrollToMarkedRow);
+        }
+      };
+
+      scrollToMarkedRow();
     },
     showRows(rows) {
       this.table.tableRows.rows = rows;

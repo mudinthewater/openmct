@@ -578,6 +578,52 @@ describe('the plugin', () => {
         expect(html).toContain('some-value 3');
       });
 
+      it('retains marked rows after filtering then clearing the filter', async () => {
+        // Rows render newest first, so the first row carries 'some-value 3'.
+        firstRow().dispatchEvent(createMouseEvent('click'));
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.table.tableRows.setColumnFilter('some-key', 'some-value 1');
+        tableView.table.tableRows.setColumnFilter('some-key', '');
+        await nextTick();
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.getViewContext().copySelectedRowsAsCSV();
+        expect(writeText.calls.mostRecent().args[0]).toContain('some-value 3');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 1');
+        expect(writeText.calls.mostRecent().args[0]).not.toContain('some-value 2');
+      });
+
+      it('keeps a single marked row focused after filtering then clearing the filter', async () => {
+        // Rows render newest first, so the last row carries 'some-value 1'.
+        const lastRow = element.querySelector(
+          'table.c-telemetry-table__body > tbody > tr:last-child'
+        );
+        lastRow.dispatchEvent(createMouseEvent('click'));
+        await nextTick();
+
+        expect(tableView.getViewContext().hasMarkedRows).toBe(true);
+
+        tableView.table.tableRows.setColumnFilter('some-key', 'some-value 2');
+        tableView.table.tableRows.setColumnFilter('some-key', '');
+        await nextTick();
+        await nextTick();
+
+        const markedRows = tableView.table.tableRows.getRows().filter((row) => row.marked);
+        expect(markedRows.length).toBe(1);
+        expect(markedRows[0].getFormattedValue('some-key')).toBe('some-value 1');
+
+        const selectedRows = element.querySelectorAll(
+          'table.c-telemetry-table__body > tbody > tr.is-selected'
+        );
+        expect(selectedRows.length).toBe(1);
+        expect(selectedRows[0].textContent).toContain('some-value 1');
+      });
+
       it('offers Copy Selected in the row menu only when rows are marked', async () => {
         const unmarkedLabels = await openContextMenu(firstRow());
 

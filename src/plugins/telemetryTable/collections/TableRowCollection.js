@@ -37,6 +37,7 @@ export default class TableRowCollection extends EventEmitter {
 
     this.rows = [];
     this.columnFilters = {};
+    this.retainedMarkedRows = [];
     this.addRows = this.addRows.bind(this);
     this.removeRowsByObject = this.removeRowsByObject.bind(this);
     this.removeRowsByData = this.removeRowsByData.bind(this);
@@ -73,14 +74,145 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   clearRowsFromTableAndFilter(rows) {
+    this.retainMarkedRows();
+
     let rowsToAdd = this.filterRows(rows);
     // Reset of all rows, need to wipe current rows
     this.rows = [];
 
     this.sortAndMergeRows(rowsToAdd);
+    this.applyRetainedMarks();
 
     // We emit filter and update of visible rows
     this.emit('filter', rowsToAdd);
+  }
+
+  /**
+   * Remember the identity of currently marked rows so marks can be
+   * reapplied after filtering rebuilds the row objects. Datum content
+   * alone cannot identify a row: repeated events can share an identical
+   * datum, so the retained identity also carries the underlying datum
+   * object and the row's occurrence among its identical siblings.
+   * @private
+   */
+  retainMarkedRows() {
+    this.pruneRetainedMarkedRows();
+
+    this.rows.forEach((row, index) => {
+      if (!row.marked) {
+        return;
+      }
+
+      const occurrence = this.rows
+        .slice(0, index)
+        .filter(
+          (other) =>
+            other.objectKeyString === row.objectKeyString && _.isEqual(other.datum, row.datum)
+        ).length;
+
+      const alreadyRetained = this.retainedMarkedRows.some((retained) => {
+        if (
+          retained.objectKeyString !== row.objectKeyString ||
+          !_.isEqual(retained.datum, row.datum)
+        ) {
+          return false;
+        }
+
+        if (retained.fullDatum !== undefined && row.fullDatum !== undefined) {
+          return retained.fullDatum === row.fullDatum;
+        }
+
+        return retained.occurrence === occurrence;
+      });
+
+      if (!alreadyRetained) {
+        this.retainedMarkedRows.push({
+          objectKeyString: row.objectKeyString,
+          datum: { ...row.datum },
+          fullDatum: row.fullDatum,
+          occurrence
+        });
+      }
+    });
+  }
+
+  /**
+   * Drop retained entries whose row is back in the collection but no
+   * longer marked (e.g. the user unselected all rows after a filter
+   * cycle). Entries whose row is currently filtered out cannot be
+   * judged and are kept.
+   * @private
+   */
+  pruneRetainedMarkedRows() {
+    this.retainedMarkedRows = this.retainedMarkedRows.filter((retained) => {
+      const matches = this.rows.filter(
+        (row) =>
+          row.objectKeyString === retained.objectKeyString && _.isEqual(row.datum, retained.datum)
+      );
+
+      if (matches.length === 0) {
+        return true;
+      }
+
+      const byFullDatum =
+        retained.fullDatum !== undefined
+          ? matches.find((row) => row.fullDatum === retained.fullDatum)
+          : undefined;
+      const candidate =
+        byFullDatum ?? matches[Math.min(retained.occurrence ?? 0, matches.length - 1)];
+
+      return candidate.marked === true;
+    });
+  }
+
+  /**
+   * Reapply retained marks to rebuilt rows, marking exactly one rebuilt
+   * row per retained row: the row built from the same underlying datum
+   * when it can be told apart, otherwise the same occurrence among
+   * datum-identical siblings. Then refresh the retained set from the
+   * live marked rows.
+   * @private
+   */
+  applyRetainedMarks() {
+    if (this.retainedMarkedRows.length === 0) {
+      return;
+    }
+
+    const claimedRowIndexes = new Set();
+
+    this.retainedMarkedRows.forEach((retained) => {
+      const candidateIndexes = [];
+
+      this.rows.forEach((row, index) => {
+        if (
+          !claimedRowIndexes.has(index) &&
+          row.objectKeyString === retained.objectKeyString &&
+          _.isEqual(retained.datum, row.datum)
+        ) {
+          candidateIndexes.push(index);
+        }
+      });
+
+      if (candidateIndexes.length === 0) {
+        return;
+      }
+
+      let chosenIndex = candidateIndexes.find(
+        (index) =>
+          retained.fullDatum !== undefined && this.rows[index].fullDatum === retained.fullDatum
+      );
+
+      if (chosenIndex === undefined) {
+        const occurrence = Math.min(retained.occurrence ?? 0, candidateIndexes.length - 1);
+        chosenIndex = candidateIndexes[occurrence];
+      }
+
+      claimedRowIndexes.add(chosenIndex);
+      this.rows[chosenIndex].marked = true;
+    });
+
+    this.retainedMarkedRows = [];
+    this.retainMarkedRows();
   }
 
   filterRows(rows) {
@@ -308,6 +440,8 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   setColumnFilter(columnKey, filter) {
+    this.retainMarkedRows();
+
     filter = filter.trim().toLowerCase();
     let wasBlank = this.columnFilters[columnKey] === undefined;
     let isSubset = this.isSubsetOfCurrentFilter(columnKey, filter);
@@ -327,6 +461,8 @@ export default class TableRowCollection extends EventEmitter {
   }
 
   setColumnRegexFilter(columnKey, filter) {
+    this.retainMarkedRows();
+
     filter = filter.trim();
     this.columnFilters[columnKey] = new RegExp(filter);
 
@@ -420,6 +556,7 @@ export default class TableRowCollection extends EventEmitter {
   clear() {
     let removedRows = this.rows;
     this.rows = [];
+    this.retainedMarkedRows = [];
 
     this.emit('remove', removedRows);
   }
